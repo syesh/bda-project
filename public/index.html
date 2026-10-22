@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ElasticLog - Web Server Log Search & Big Data Analytics</title>
+  <meta name="description" content="Elasticsearch-powered Web Server Log Search, Monitoring, and Big Data Analytics Platform">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="app.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Navigation Header -->
+    <header class="top-nav">
+      <div class="nav-brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>ElasticLog</h1>
+          <span class="brand-sub">Big Data Analytics Engine</span>
+        </div>
+      </div>
+
+      <div class="nav-center">
+        <button id="engineStatusBadge" class="engine-badge" title="Click to configure Elasticsearch connection">
+          <span class="status-dot pulse"></span>
+          <span id="engineStatusText">Checking Engine...</span>
+          <span id="clusterHealthTag" class="cluster-tag">CONNECTING</span>
+        </button>
+
+        <button id="liveStreamToggle" class="live-toggle-btn" title="Toggle real-time log ingestion simulation">
+          <span class="live-dot"></span>
+          <span class="live-label">LIVE STREAM</span>
+        </button>
+      </div>
+
+      <div class="nav-actions">
+        <button id="btnViewDsl" class="btn btn-secondary" title="View Elasticsearch JSON Query DSL">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          ES Query DSL
+        </button>
+        <button id="btnUploadModal" class="btn btn-secondary" title="Upload custom log file">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Import Logs
+        </button>
+        <button id="btnGenerateModal" class="btn btn-primary" title="Generate synthetic traffic scenarios">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          Ingest Traffic
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-content">
+      <!-- KPI Overview Cards -->
+      <section class="kpi-grid">
+        <div class="kpi-card" id="kpiTotalDocs">
+          <div class="kpi-header">
+            <span class="kpi-title">Total Log Volume</span>
+            <div class="kpi-icon icon-blue">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="valTotalDocs">0</div>
+          <div class="kpi-footer">
+            <span class="kpi-sub" id="subQueryTook">Query latency: 0ms</span>
+          </div>
+        </div>
+
+        <div class="kpi-card" id="kpiErrorRate">
+          <div class="kpi-header">
+            <span class="kpi-title">Error Rate (4xx / 5xx)</span>
+            <div class="kpi-icon icon-red">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="valErrorRate">0.0%</div>
+          <div class="kpi-footer">
+            <span class="kpi-sub" id="subErrorCounts">0 errors detected</span>
+          </div>
+        </div>
+
+        <div class="kpi-card" id="kpiLatency">
+          <div class="kpi-header">
+            <span class="kpi-title">Response Latency</span>
+            <div class="kpi-icon icon-amber">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="valAvgLatency">0 <span class="unit">ms</span></div>
+          <div class="kpi-footer">
+            <span class="kpi-sub" id="subP95Latency">95th percentile (p95): 0ms</span>
+          </div>
+        </div>
+
+        <div class="kpi-card" id="kpiBandwidth">
+          <div class="kpi-header">
+            <span class="kpi-title">Data Transferred</span>
+            <div class="kpi-icon icon-emerald">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="valBandwidth">0 <span class="unit">MB</span></div>
+          <div class="kpi-footer">
+            <span class="kpi-sub" id="subThroughput">Throughput analytics</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Search & Filtering Command Center -->
+      <section class="search-command-center">
+        <div class="search-bar-row">
+          <div class="search-input-wrapper">
+            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              type="text"
+              id="searchInput"
+              placeholder="Search logs across message, endpoint, client IP, user agent... (e.g. status:500, method:POST, /api/v1/auth)"
+              autocomplete="off"
+            />
+            <button id="btnClearSearch" class="btn-clear-search" title="Clear search">×</button>
+          </div>
+
+          <div class="filter-controls-group">
+            <!-- Method Select -->
+            <select id="filterMethod" class="filter-select">
+              <option value="">All Methods</option>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+              <option value="PATCH">PATCH</option>
+            </select>
+
+            <!-- Status Code Select -->
+            <select id="filterStatus" class="filter-select">
+              <option value="">All Statuses</option>
+              <option value="200">200 OK</option>
+              <option value="201">201 Created</option>
+              <option value="304">304 Not Modified</option>
+              <option value="400">400 Bad Request</option>
+              <option value="401">401 Unauthorized</option>
+              <option value="403">403 Forbidden</option>
+              <option value="404">404 Not Found</option>
+              <option value="500">500 Server Error</option>
+              <option value="502">502 Bad Gateway</option>
+              <option value="503">503 Unavailable</option>
+            </select>
+
+            <!-- Time Range Select -->
+            <select id="filterTimeRange" class="filter-select">
+              <option value="all">Time: All History</option>
+              <option value="15m">Time: Last 15 Mins</option>
+              <option value="1h" selected>Time: Last 1 Hour</option>
+              <option value="24h">Time: Last 24 Hours</option>
+              <option value="7d">Time: Last 7 Days</option>
+            </select>
+
+            <button id="btnRefresh" class="btn btn-secondary btn-icon" title="Refresh Search & Aggregations">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Filter Chips -->
+        <div class="quick-chips-row">
+          <span class="chips-label">Quick Facets:</span>
+          <button class="chip active" data-chip="all">All Logs</button>
+          <button class="chip chip-danger" data-chip="errors">HTTP Errors (4xx/5xx)</button>
+          <button class="chip chip-warning" data-chip="slow">Slow Requests (&gt;500ms)</button>
+          <button class="chip chip-purple" data-chip="probes">Security Probes & Scanners</button>
+          <button class="chip chip-info" data-chip="api">API Routes (/api/*)</button>
+          <button class="chip chip-gray" data-chip="static">Static Assets</button>
+
+          <div class="chips-spacer"></div>
+
+          <!-- Export Dropdown -->
+          <div class="export-group">
+            <button id="btnExportJson" class="btn-chip" title="Export matching hits to JSON">Export JSON</button>
+            <button id="btnExportCsv" class="btn-chip" title="Export matching hits to CSV">Export CSV</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Charts & Visual Analytics Section -->
+      <section class="charts-dashboard-grid">
+        <!-- Chart 1: Traffic & Errors Over Time -->
+        <div class="chart-panel chart-panel-large">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h3>Traffic Volume & Error Trend Over Time</h3>
+              <span class="panel-subtitle">Elasticsearch date_histogram aggregation with error filter</span>
+            </div>
+            <div class="panel-badge">Time Series</div>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartTrafficTime"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 2: Status Code Breakdown -->
+        <div class="chart-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h3>HTTP Status Distribution</h3>
+              <span class="panel-subtitle">Elasticsearch terms aggregation on status_code</span>
+            </div>
+            <div class="panel-badge">Categorical</div>
+          </div>
+          <div class="chart-container doughnut-wrapper">
+            <canvas id="chartStatusDist"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 3: Top Endpoints -->
+        <div class="chart-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h3>Top 10 Requested Endpoints</h3>
+              <span class="panel-subtitle">Elasticsearch terms aggregation on endpoint.raw</span>
+            </div>
+            <div class="panel-badge">Top N</div>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartTopEndpoints"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 4: Latency Percentiles -->
+        <div class="chart-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h3>Latency Percentile Distribution (ms)</h3>
+              <span class="panel-subtitle">Elasticsearch percentiles (p50, p90, p95, p99)</span>
+            </div>
+            <div class="panel-badge">Performance</div>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartLatencyPercentiles"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 5: Geographic Distribution -->
+        <div class="chart-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h3>Geographic Traffic Distribution</h3>
+              <span class="panel-subtitle">Elasticsearch terms aggregation on country</span>
+            </div>
+            <div class="panel-badge">Geo Analytics</div>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartGeoDist"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Raw Log Table & Document Explorer -->
+      <section class="log-explorer-section">
+        <div class="section-toolbar">
+          <div class="toolbar-title">
+            <h2>Log Documents Explorer</h2>
+            <span id="logResultsCount" class="results-badge">Showing 0 matching documents</span>
+          </div>
+          <div class="toolbar-actions">
+            <label class="sort-label">Sort:</label>
+            <select id="sortFieldSelect" class="filter-select select-compact">
+              <option value="@timestamp:desc">Newest First</option>
+              <option value="@timestamp:asc">Oldest First</option>
+              <option value="response_time_ms:desc">Slowest Latency</option>
+              <option value="response_size:desc">Largest Size</option>
+              <option value="status_code:desc">Highest Status</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-responsive">
+            <table class="log-table" id="logTable">
+              <thead>
+                <tr>
+                  <th style="width: 170px;">Timestamp</th>
+                  <th style="width: 140px;">Client IP</th>
+                  <th style="width: 80px;">Method</th>
+                  <th>Request Endpoint</th>
+                  <th style="width: 90px;">Status</th>
+                  <th style="width: 100px;">Latency</th>
+                  <th style="width: 90px;">Size</th>
+                  <th style="width: 110px;">Country</th>
+                  <th style="width: 70px;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="logTableBody">
+                <tr>
+                  <td colspan="9" class="loading-td">
+                    <div class="table-loader">
+                      <div class="spinner"></div>
+                      <span>Querying Elasticsearch...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Bar -->
+          <div class="pagination-bar">
+            <div class="page-info" id="paginationInfo">Page 1 of 1</div>
+            <div class="page-controls">
+              <button id="btnPrevPage" class="btn btn-secondary btn-sm" disabled>Previous</button>
+              <span id="pageCurrentDisplay" class="page-current">1</span>
+              <button id="btnNextPage" class="btn btn-secondary btn-sm">Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: Document JSON Inspector Drawer -->
+  <div id="modalDocInspector" class="modal-overlay">
+    <div class="modal-card modal-large">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Elasticsearch Document Inspector</h3>
+          <span class="modal-sub" id="inspectorDocId">_id: -</span>
+        </div>
+        <button class="modal-close" data-close="modalDocInspector">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="inspector-grid" id="inspectorQuickFields"></div>
+        <div class="json-code-header">
+          <span>Raw Elasticsearch _source JSON</span>
+          <button id="btnCopyDocJson" class="btn-copy">Copy JSON</button>
+        </div>
+        <pre class="json-code-block"><code id="inspectorJsonCode"></code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Elasticsearch Query DSL Viewer -->
+  <div id="modalDslViewer" class="modal-overlay">
+    <div class="modal-card modal-large">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Generated Elasticsearch Query DSL</h3>
+          <span class="modal-sub">Exact POST /web-server-logs/_search request body</span>
+        </div>
+        <button class="modal-close" data-close="modalDslViewer">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="dsl-description">
+          This payload is constructed dynamically from your dashboard filters and executed against the Elasticsearch cluster.
+          Notice the <code>bool</code> filter clauses and multi-dimensional aggregations (<code>date_histogram</code>, <code>terms</code>, <code>percentiles</code>).
+        </p>
+        <div class="json-code-header">
+          <span>Elasticsearch Query Body</span>
+          <button id="btnCopyDsl" class="btn-copy">Copy Query</button>
+        </div>
+        <pre class="json-code-block"><code id="dslCodeBlock"></code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Traffic Ingestion Generator -->
+  <div id="modalGenerate" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Ingest Synthetic Web Traffic</h3>
+          <span class="modal-sub">Simulate production workloads for Big Data analysis</span>
+        </div>
+        <button class="modal-close" data-close="modalGenerate">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="formGenerate" class="modal-form">
+          <div class="form-group">
+            <label>Traffic Scenario:</label>
+            <select id="genScenario" class="form-control">
+              <option value="normal">Normal E-Commerce & Web Traffic (80%+ 200 OK)</option>
+              <option value="spike">Traffic Spike (High request volume over short interval)</option>
+              <option value="ddos">DDoS Attack Simulation (Single IP flood + 503 Server Errors)</option>
+              <option value="probe">Security Scanner / Recon Probe (404/403 admin page scans)</option>
+              <option value="slow">Database Slowdown / High Latency Bottleneck</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Number of Log Entries:</label>
+            <select id="genCount" class="form-control">
+              <option value="500">500 Log Documents</option>
+              <option value="1500" selected>1,500 Log Documents</option>
+              <option value="5000">5,000 Log Documents</option>
+              <option value="10000">10,000 Log Documents (Big Data Volume)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Time Window:</label>
+            <select id="genTimeWindow" class="form-control">
+              <option value="15">Spread over past 15 minutes</option>
+              <option value="60" selected>Spread over past 1 hour</option>
+              <option value="1440">Spread over past 24 hours</option>
+            </select>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" data-close="modalGenerate">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btnSubmitGenerate">
+              Ingest & Index
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Custom Log File Upload -->
+  <div id="modalUpload" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Import Custom Log Files</h3>
+          <span class="modal-sub">Supports Apache Combined, Nginx, or JSON log formats</span>
+        </div>
+        <button class="modal-close" data-close="modalUpload">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Choose a .log or .txt file:</label>
+          <input type="file" id="fileUploadInput" accept=".log,.txt,.json" class="form-control file-input">
+        </div>
+        <div class="form-group">
+          <label>Or paste raw log lines directly:</label>
+          <textarea id="rawLogPaste" class="form-control textarea-logs" rows="6" placeholder='198.51.100.42 - - [22/Oct/2026:14:32:10 +0000] "GET /api/v1/products HTTP/1.1" 200 4520 "https://google.com" "Mozilla/5.0" 45.2'></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-close="modalUpload">Cancel</button>
+          <button type="button" class="btn btn-primary" id="btnSubmitUpload">Parse & Bulk Index</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Engine & Cluster Settings -->
+  <div id="modalSettings" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Elasticsearch Cluster & Engine Config</h3>
+          <span class="modal-sub">Configure active Big Data storage & search backend</span>
+        </div>
+        <button class="modal-close" data-close="modalSettings">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Elasticsearch REST Endpoint:</label>
+          <input type="text" id="settingEsHost" class="form-control" value="http://localhost:9200">
+          <span class="form-hint">Default local cluster port is <code>http://localhost:9200</code>.</span>
+        </div>
+
+        <div class="form-group">
+          <label>Engine Backend Mode:</label>
+          <select id="settingEngineMode" class="form-control">
+            <option value="auto">Auto-Detect (Use Real ES if reachable, fallback to Embedded)</option>
+            <option value="elasticsearch">Enforce Real Elasticsearch (9200)</option>
+            <option value="embedded">Enforce Embedded In-Memory Engine</option>
+          </select>
+        </div>
+
+        <div class="cluster-diagnostic-box" id="clusterDiagnosticBox">
+          <div class="diag-row">
+            <span class="diag-label">Reachable:</span>
+            <span class="diag-val" id="diagReachable">-</span>
+          </div>
+          <div class="diag-row">
+            <span class="diag-label">Cluster Status:</span>
+            <span class="diag-val" id="diagStatus">-</span>
+          </div>
+          <div class="diag-row">
+            <span class="diag-label">Target Index:</span>
+            <span class="diag-val" id="diagIndex">web-server-logs</span>
+          </div>
+        </div>
+
+        <div class="modal-actions" style="justify-content: space-between;">
+          <button type="button" id="btnClearIndexBtn" class="btn btn-danger-outline">Clear Index Data</button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-secondary" data-close="modalSettings">Close</button>
+            <button type="button" class="btn btn-primary" id="btnSaveSettings">Save & Re-test</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

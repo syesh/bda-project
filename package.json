@@ -1,0 +1,21 @@
+{
+  "name": "bda-elasticsearch-log-analytics",
+  "version": "1.0.0",
+  "description": "Elasticsearch-based application for web server log search and big data analytics",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "generate": "python3 python_toolkit/log_generator.py 2000 data/access.log",
+    "analytics": "python3 python_toolkit/analytics_cli.py"
+  },
+  "keywords": [
+    "big-data-analytics",
+    "elasticsearch",
+    "log-analysis",
+    "apache-logs",
+    "lucene",
+    "visual-analytics"
+  ],
+  "author": "Antigravity",
+  "license": "MIT"
+}
