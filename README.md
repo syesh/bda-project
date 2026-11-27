@@ -12,7 +12,7 @@ It is designed with **dual-engine architecture**:
 
 Experience the full interactive dashboard live with zero installation:
 
-👉 **[https://syesh.github.io/bda-project/]([https://syesh.github.io/bda-project/](https://syesh.github.io/ElasticLog-project/))**
+👉 **https://syesh.github.io/ElasticLog-project/**
 
 ---
 
