@@ -207,6 +207,11 @@ body {
   color: #fbbf24;
 }
 
+.cluster-tag.in-browser {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
 /* Live Toggle */
 .live-toggle-btn {
   display: inline-flex;

@@ -6,6 +6,8 @@
 
 // Application State
 const state = {
+  isBrowserMode: false,
+  liveStreamTimer: null,
   query: '',
   method: '',
   status: '',
@@ -101,9 +103,9 @@ const elements = {
 };
 
 // Initialize Application
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
-  checkSystemStatus();
+  await checkSystemStatus();
   executeSearch();
 });
 
@@ -275,18 +277,25 @@ function setupEventListeners() {
     showToast(`Generating & indexing ${count} logs (${scenario})...`, 'info');
 
     try {
-      const res = await fetch('/api/index/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario, count, timeWindowMinutes })
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`Successfully indexed ${data.generated} logs into ${data.engine}!`, 'success');
+      if (state.isBrowserMode) {
+        const data = window.ElasticLogBrowser.instance.generate(scenario, count, timeWindowMinutes);
+        showToast(`Successfully indexed ${data.generated} logs into In-Browser Engine!`, 'success');
         checkSystemStatus();
         executeSearch();
       } else {
-        showToast(`Generation failed: ${data.error}`, 'error');
+        const res = await fetch('/api/index/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario, count, timeWindowMinutes })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Successfully indexed ${data.generated} logs into ${data.engine}!`, 'success');
+          checkSystemStatus();
+          executeSearch();
+        } else {
+          showToast(`Generation failed: ${data.error}`, 'error');
+        }
       }
     } catch (err) {
       showToast(`Error: ${err.message}`, 'error');
@@ -311,20 +320,29 @@ function setupEventListeners() {
     showToast('Parsing and bulk indexing custom logs...', 'info');
 
     try {
-      const res = await fetch('/api/index/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: content
-      });
-      const data = await res.json();
-      if (data.success) {
+      if (state.isBrowserMode) {
+        const data = window.ElasticLogBrowser.instance.upload(content);
         showToast(`Successfully indexed ${data.indexed} logs (${data.parseErrors} skipped)`, 'success');
         elements.rawLogPaste.value = '';
         elements.fileUploadInput.value = '';
         checkSystemStatus();
         executeSearch();
       } else {
-        showToast(`Upload failed: ${data.error}`, 'error');
+        const res = await fetch('/api/index/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: content
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Successfully indexed ${data.indexed} logs (${data.parseErrors} skipped)`, 'success');
+          elements.rawLogPaste.value = '';
+          elements.fileUploadInput.value = '';
+          checkSystemStatus();
+          executeSearch();
+        } else {
+          showToast(`Upload failed: ${data.error}`, 'error');
+        }
       }
     } catch (err) {
       showToast(`Upload error: ${err.message}`, 'error');
@@ -337,17 +355,24 @@ function setupEventListeners() {
     const enginePreference = elements.settingEngineMode.value;
 
     try {
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host, enginePreference })
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast('Settings saved successfully', 'success');
+      if (state.isBrowserMode) {
+        showToast('Settings saved for In-Browser Engine', 'success');
         closeModal(elements.modalSettings);
         checkSystemStatus();
         executeSearch();
+      } else {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host, enginePreference })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Settings saved successfully', 'success');
+          closeModal(elements.modalSettings);
+          checkSystemStatus();
+          executeSearch();
+        }
       }
     } catch (err) {
       showToast(`Failed to save settings: ${err.message}`, 'error');
@@ -360,13 +385,21 @@ function setupEventListeners() {
       return;
     }
     try {
-      const res = await fetch('/api/index/clear', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
+      if (state.isBrowserMode) {
+        window.ElasticLogBrowser.instance.clear();
         showToast('Index data cleared', 'info');
         closeModal(elements.modalSettings);
         checkSystemStatus();
         executeSearch();
+      } else {
+        const res = await fetch('/api/index/clear', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Index data cleared', 'info');
+          closeModal(elements.modalSettings);
+          checkSystemStatus();
+          executeSearch();
+        }
       }
     } catch (err) {
       showToast(`Clear failed: ${err.message}`, 'error');
@@ -381,13 +414,51 @@ function setupEventListeners() {
   elements.btnExportCsv.addEventListener('click', () => triggerExport('csv'));
 }
 
+function activateBrowserMode() {
+  state.isBrowserMode = true;
+  if (window.ElasticLogBrowser && window.ElasticLogBrowser.instance) {
+    window.ElasticLogBrowser.instance.init(1500);
+  }
+
+  elements.engineStatusBadge.className = 'engine-badge in-browser';
+  const dot = elements.engineStatusBadge.querySelector('.status-dot');
+  if (dot) dot.className = 'status-dot embedded pulse';
+  elements.engineStatusText.textContent = 'In-Browser ES Engine (GitHub Pages)';
+  elements.clusterHealthTag.textContent = 'CLIENT-SIDE';
+  elements.clusterHealthTag.className = 'cluster-tag in-browser';
+
+  if (elements.diagReachable) {
+    elements.diagReachable.textContent = 'Active (In-Browser Virtual Cluster)';
+    elements.diagReachable.style.color = '#34d399';
+  }
+  if (elements.diagStatus) {
+    elements.diagStatus.textContent = 'Online (Zero Backend Required)';
+  }
+}
+
 /**
  * Check Backend Engine & Elasticsearch Cluster Health
  */
 async function checkSystemStatus() {
+  const isStaticHost = window.location.protocol === 'file:' || window.location.hostname.endsWith('github.io');
+  if (isStaticHost) {
+    activateBrowserMode();
+    return;
+  }
+
   try {
-    const res = await fetch('/api/status');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch('/api/status', { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      activateBrowserMode();
+      return;
+    }
+
     const data = await res.json();
+    state.isBrowserMode = false;
 
     const isES = data.activeEngine === 'elasticsearch';
     const es = data.elasticsearch;
@@ -413,8 +484,7 @@ async function checkSystemStatus() {
     elements.diagStatus.textContent = es.reachable ? `${es.status} (${es.cluster_name})` : 'Unreachable';
     elements.settingEngineMode.value = data.enginePreference || 'auto';
   } catch (err) {
-    elements.engineStatusText.textContent = 'Server Offline';
-    elements.clusterHealthTag.textContent = 'ERR';
+    activateBrowserMode();
   }
 }
 
@@ -438,18 +508,26 @@ async function executeSearch() {
   };
 
   try {
-    const res = await fetch('/api/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    let data;
+    if (state.isBrowserMode) {
+      if (!window.ElasticLogBrowser || !window.ElasticLogBrowser.instance) {
+        throw new Error('In-browser Elasticsearch engine failed to initialize');
+      }
+      data = window.ElasticLogBrowser.instance.search(payload);
+    } else {
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || `HTTP ${res.status}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      data = await res.json();
     }
-
-    const data = await res.json();
 
     state.lastDslQuery = data.dslQuery;
     state.totalHits = data.total;
@@ -471,6 +549,11 @@ async function executeSearch() {
     updatePagination();
   } catch (err) {
     console.error('Search query failed:', err);
+    if (!state.isBrowserMode && window.ElasticLogBrowser) {
+      console.warn('Backend call failed, falling back to In-Browser Engine');
+      activateBrowserMode();
+      return executeSearch();
+    }
     elements.logTableBody.innerHTML = `
       <tr>
         <td colspan="9" style="text-align: center; color: #f43f5e; padding: 30px;">
@@ -907,10 +990,14 @@ function renderGeoDistributionChart(buckets) {
 }
 
 /**
- * Toggle Live Real-Time Log Streaming via SSE
+ * Toggle Live Real-Time Log Streaming via SSE or In-Browser Simulator
  */
 function toggleLiveStream() {
   if (state.isLiveStreaming) {
+    if (state.liveStreamTimer) {
+      clearInterval(state.liveStreamTimer);
+      state.liveStreamTimer = null;
+    }
     if (state.eventSource) {
       state.eventSource.close();
       state.eventSource = null;
@@ -923,29 +1010,40 @@ function toggleLiveStream() {
     elements.liveStreamToggle.classList.add('active');
     showToast('Live traffic stream started! Ingesting real-time logs...', 'success');
 
-    state.eventSource = new EventSource('/api/live/stream');
+    if (state.isBrowserMode) {
+      state.liveStreamTimer = setInterval(() => {
+        const batchCount = Math.floor(1 + Math.random() * 3);
+        const newLogs = window.ElasticLogBrowser.instance.generateLiveBatch(batchCount);
+        state.totalHits += newLogs.length;
+        elements.valTotalDocs.textContent = state.totalHits.toLocaleString();
 
-    state.eventSource.addEventListener('log', e => {
-      try {
-        const newLogs = JSON.parse(e.data);
-        if (Array.isArray(newLogs) && newLogs.length > 0) {
-          // Increment total counter
-          state.totalHits += newLogs.length;
-          elements.valTotalDocs.textContent = state.totalHits.toLocaleString();
-
-          // Refresh query every 3 ticks
-          if (Math.random() < 0.4) {
-            executeSearch();
-          }
+        if (Math.random() < 0.4) {
+          executeSearch();
         }
-      } catch (err) {
-        console.error('SSE parse error:', err);
-      }
-    });
+      }, 2000);
+    } else {
+      state.eventSource = new EventSource('/api/live/stream');
 
-    state.eventSource.onerror = () => {
-      console.warn('SSE connection interrupted, retrying...');
-    };
+      state.eventSource.addEventListener('log', e => {
+        try {
+          const newLogs = JSON.parse(e.data);
+          if (Array.isArray(newLogs) && newLogs.length > 0) {
+            state.totalHits += newLogs.length;
+            elements.valTotalDocs.textContent = state.totalHits.toLocaleString();
+
+            if (Math.random() < 0.4) {
+              executeSearch();
+            }
+          }
+        } catch (err) {
+          console.error('SSE parse error:', err);
+        }
+      });
+
+      state.eventSource.onerror = () => {
+        console.warn('SSE connection interrupted, retrying...');
+      };
+    }
   }
 }
 
@@ -954,33 +1052,46 @@ function toggleLiveStream() {
  */
 async function triggerExport(format = 'json') {
   showToast(`Preparing ${format.toUpperCase()} export...`, 'info');
+  const payload = {
+    query: state.query,
+    methods: state.method ? [state.method] : [],
+    statusCodes: state.status ? state.status.split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean) : [],
+    timeRange: state.timeRange,
+    minLatency: state.minLatency,
+    endpointFilter: state.endpointFilter,
+    format
+  };
+
   try {
-    const payload = {
-      query: state.query,
-      methods: state.method ? [state.method] : [],
-      statusCodes: state.status ? state.status.split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean) : [],
-      timeRange: state.timeRange,
-      minLatency: state.minLatency,
-      endpointFilter: state.endpointFilter,
-      format
-    };
+    if (state.isBrowserMode) {
+      const { blob, filename } = window.ElasticLogBrowser.instance.export(payload, format);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast(`Exported ${format.toUpperCase()} successfully!`, 'success');
+    } else {
+      const res = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-    const res = await fetch('/api/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `web_server_logs_${Date.now()}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
-    showToast(`Exported ${format.toUpperCase()} successfully!`, 'success');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `web_server_logs_${Date.now()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast(`Exported ${format.toUpperCase()} successfully!`, 'success');
+    }
   } catch (err) {
     showToast(`Export failed: ${err.message}`, 'error');
   }
